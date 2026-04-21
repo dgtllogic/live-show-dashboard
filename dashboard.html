@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Live Show Analytics — TikTok vs Whatnot</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #131a26;
+    --panel-2: #1a2333;
+    --border: #26334a;
+    --text: #e6edf7;
+    --muted: #8a99b3;
+    --accent: #5ad1ff;
+    --tiktok: #ff3b6b;
+    --tiktok-soft: rgba(255, 59, 107, 0.18);
+    --whatnot: #ffd43b;
+    --whatnot-soft: rgba(255, 212, 59, 0.2);
+    --wn-s: #ffd43b;
+    --wn-wc: #b388ff;
+    --wn-k: #42e2b8;
+    --wn-mc: #ff9f43;
+    --good: #42e2b8;
+    --bad: #ff6b6b;
+    --shadow: 0 6px 24px rgba(0, 0, 0, 0.4);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+    font-size: 14px; line-height: 1.45;
+  }
+  .wrap { max-width: 1440px; margin: 0 auto; padding: 24px; }
+  header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+  h1 { font-size: 22px; margin: 0; font-weight: 700; letter-spacing: -0.2px; }
+  .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+  .pill-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pill {
+    background: var(--panel); border: 1px solid var(--border); color: var(--text);
+    padding: 6px 12px; border-radius: 999px; cursor: pointer; font-size: 12px;
+    transition: all 0.15s ease; user-select: none;
+  }
+  .pill:hover { border-color: var(--accent); }
+  .pill.active { background: var(--accent); color: #001826; border-color: var(--accent); font-weight: 600; }
+  .filter-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .filter-label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; margin-right: 4px; }
+
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px;
+  }
+  .kpi {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow); position: relative; overflow: hidden;
+  }
+  .kpi::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+    opacity: 0.8;
+  }
+  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; }
+  .kpi .value { font-size: 22px; font-weight: 700; margin-top: 6px; letter-spacing: -0.3px; }
+  .kpi .delta { font-size: 11px; margin-top: 4px; color: var(--muted); }
+  .kpi .delta.up { color: var(--good); }
+  .kpi .delta.down { color: var(--bad); }
+
+  .row { display: grid; gap: 16px; margin-bottom: 16px; }
+  .row.cols-2 { grid-template-columns: 1fr 1fr; }
+  .row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .row.cols-2-1 { grid-template-columns: 2fr 1fr; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; box-shadow: var(--shadow);
+  }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--text); margin: 0 0 2px; }
+  .card-sub { font-size: 11px; color: var(--muted); margin: 0 0 14px; }
+  .chart-box { position: relative; height: 280px; }
+  .chart-box.tall { height: 320px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th:first-child, td:first-child, th:nth-child(2), td:nth-child(2) { text-align: left; }
+  th {
+    color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    font-size: 10.5px; cursor: pointer; user-select: none; background: var(--panel-2);
+    position: sticky; top: 0;
+  }
+  th:hover { color: var(--accent); }
+  tr:hover td { background: rgba(90, 209, 255, 0.04); }
+  .platform-tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10.5px;
+    font-weight: 600; letter-spacing: 0.3px;
+  }
+  .tag-tiktok { background: var(--tiktok-soft); color: var(--tiktok); }
+  .tag-wn-s { background: var(--whatnot-soft); color: var(--whatnot); }
+  .tag-wn-wc { background: rgba(179, 136, 255, 0.18); color: var(--wn-wc); }
+  .tag-wn-k { background: rgba(66, 226, 184, 0.18); color: var(--wn-k); }
+  .tag-wn-mc { background: rgba(255, 159, 67, 0.18); color: var(--wn-mc); }
+
+  .muted { color: var(--muted); }
+  .good { color: var(--good); }
+  .bad { color: var(--bad); }
+
+  .insights {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px;
+  }
+  .insight {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 12px;
+    padding: 14px 16px; position: relative;
+  }
+  .insight .hdr { font-size: 11px; color: var(--accent); text-transform: uppercase; letter-spacing: 0.8px; font-weight: 700; }
+  .insight .body { font-size: 13px; margin-top: 6px; color: var(--text); }
+
+  .table-wrap { max-height: 520px; overflow-y: auto; border-radius: 10px; border: 1px solid var(--border); }
+
+  footer { color: var(--muted); font-size: 11px; text-align: center; margin-top: 20px; padding: 10px; }
+
+  @media (max-width: 1100px) {
+    .kpi-grid { grid-template-columns: repeat(3, 1fr); }
+    .row.cols-3, .row.cols-2, .row.cols-2-1 { grid-template-columns: 1fr; }
+    .insights { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Live Show Analytics</h1>
+      <div class="sub" id="dateRange">TikTok &amp; Whatnot performance — loading…</div>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Week</span>
+      <div class="pill-row" id="weekFilter"></div>
+      <span class="filter-label" style="margin-left:8px">Platform</span>
+      <div class="pill-row" id="platformFilter"></div>
+    </div>
+  </header>
+
+  <div class="kpi-grid" id="kpiGrid"></div>
+
+  <div class="insights" id="insights"></div>
+
+  <div class="row cols-2">
+    <div class="card">
+      <div class="card-title">Daily Sales &amp; Profit</div>
+      <div class="card-sub">Gross sales bars, profit line overlay</div>
+      <div class="chart-box tall"><canvas id="dailySalesChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Daily Viewers</div>
+      <div class="card-sub">Real viewer count per show (TikTok vs Whatnot)</div>
+      <div class="chart-box tall"><canvas id="viewersChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="row cols-3">
+    <div class="card">
+      <div class="card-title">Sales Split by Platform</div>
+      <div class="card-sub">Share of gross sales</div>
+      <div class="chart-box"><canvas id="salesDonutChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Profit Margin by Platform</div>
+      <div class="card-sub">Profit ÷ Sales, shows with complete data only</div>
+      <div class="chart-box"><canvas id="marginChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Revenue per Viewer</div>
+      <div class="card-sub">After-fees revenue ÷ viewers — buyer intensity</div>
+      <div class="chart-box"><canvas id="rpvChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="row cols-2-1">
+    <div class="card">
+      <div class="card-title">Weekly Performance</div>
+      <div class="card-sub">Sales, profit, and units rolled up by week</div>
+      <div class="chart-box tall"><canvas id="weeklyChart"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Avg Order Value by Platform</div>
+      <div class="card-sub">Sales ÷ units sold — ticket size</div>
+      <div class="chart-box tall"><canvas id="aovChart"></canvas></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-title">Show-by-Show Breakdown</div>
+    <div class="card-sub">Click any column header to sort. "—" = data not yet filled in.</div>
+    <div class="table-wrap">
+      <table id="showTable">
+        <thead>
+          <tr>
+            <th data-key="date">Date</th>
+            <th data-key="platform">Platform</th>
+            <th data-key="qty">Qty</th>
+            <th data-key="sales">Sales</th>
+            <th data-key="afterFees">After Fees</th>
+            <th data-key="cogs">COGS</th>
+            <th data-key="shipping">Shipping</th>
+            <th data-key="profit">Profit</th>
+            <th data-key="margin">Margin</th>
+            <th data-key="viewers">Viewers</th>
+            <th data-key="rpv">$/Viewer</th>
+            <th data-key="aov">AOV</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>Data pulled from Google Sheet. Shows with blank COGS/Profit are still pending in your source data — those metrics are excluded from profitability charts.</footer>
+</div>
+
+<script>
+/* ==========  DATA (starting 4/6/2026)  ========== */
+const rawRows = [
+  { date: '2026-04-06', platform: 'TIKTOK',     qty: 88,  sales: 2580.13, afterFees: 2425.32, cogs: 1622.00, shipping: 528.12, profit: 275.20,  viewers: 4500 },
+  { date: '2026-04-06', platform: 'WHATNOT S',  qty: 82,  sales: 2226.00, afterFees: 1913.75, cogs: 1712.00, shipping: 0.00,   profit: 201.75,  viewers: 891  },
+  { date: '2026-04-07', platform: 'WHATNOT S',  qty: 102, sales: 2453.00, afterFees: 2112.59, cogs: 1724.00, shipping: 0.00,   profit: 388.59,  viewers: 1078 },
+  { date: '2026-04-07', platform: 'TIKTOK',     qty: 52,  sales: 1885.41, afterFees: 1772.29, cogs: 1096.00, shipping: 254.80, profit: 421.49,  viewers: 4060 },
+  { date: '2026-04-09', platform: 'TIKTOK',     qty: 40,  sales: 1181.09, afterFees: 1110.22, cogs: 701.75,  shipping: 224.00, profit: 184.47,  viewers: 3430 },
+  { date: '2026-04-09', platform: 'WHATNOT S',  qty: 125, sales: 3203.00, afterFees: 2700.67, cogs: 2212.20, shipping: 0.00,   profit: 488.47,  viewers: 1160 },
+  { date: '2026-04-13', platform: 'TIKTOK',     qty: 107, sales: 3807.27, afterFees: 3578.83, cogs: 2058.00, shipping: 508.99, profit: 1011.84, viewers: 4470 },
+  { date: '2026-04-13', platform: 'WHATNOT S',  qty: 158, sales: 5006.00, afterFees: 4349.46, cogs: 3650.35, shipping: 0.00,   profit: 699.11,  viewers: 2281 },
+  { date: '2026-04-14', platform: 'WHATNOT S',  qty: 122, sales: 4108.00, afterFees: 3553.21, cogs: 2949.00, shipping: 0.00,   profit: 604.21,  viewers: 1944 },
+  { date: '2026-04-14', platform: 'TIKTOK',     qty: 131, sales: 4624.95, afterFees: 4347.45, cogs: 2845.75, shipping: 603.38, profit: 898.32,  viewers: 6160 },
+  { date: '2026-04-15', platform: 'TIKTOK',     qty: 124, sales: 3882.98, afterFees: 3650.00, cogs: 2380.70, shipping: 498.17, profit: 771.13,  viewers: 6470 },
+  { date: '2026-04-15', platform: 'WHATNOT S',  qty: 141, sales: 4457.00, afterFees: 3831.71, cogs: 2675.35, shipping: 0.00,   profit: 1156.36, viewers: 1519 },
+  { date: '2026-04-16', platform: 'WHATNOT WC', qty: 79,  sales: 3955.00, afterFees: 3483.33, cogs: 666.00,  shipping: 0.00,   profit: 2817.33, viewers: 1000 },
+  { date: '2026-04-16', platform: 'WHATNOT S',  qty: 88,  sales: 3215.00, afterFees: 2805.77, cogs: null,    shipping: 0.00,   profit: null,    viewers: 1396 },
+  { date: '2026-04-17', platform: 'WHATNOT K',  qty: 66,  sales: 1703.00, afterFees: 1484.16, cogs: null,    shipping: 0.00,   profit: null,    viewers: 1269 },
+  { date: '2026-04-20', platform: 'TIKTOK',     qty: 113, sales: 4403.63, afterFees: 4139.41, cogs: null,    shipping: 456.30, profit: null,    viewers: 6400 },
+  { date: '2026-04-20', platform: 'WHATNOT WC', qty: 49,  sales: 1434.00, afterFees: 1255.28, cogs: null,    shipping: 0.00,   profit: null,    viewers: 900  },
+  { date: '2026-04-20', platform: 'WHATNOT S',  qty: 71,  sales: 2827.00, afterFees: 2482.27, cogs: null,    shipping: 0.00,   profit: null,    viewers: 2234 },
+  { date: '2026-04-21', platform: 'TIKTOK',     qty: 68,  sales: 2658.53, afterFees: 2499.02, cogs: null,    shipping: 333.45, profit: null,    viewers: 3950 },
+  { date: '2026-04-21', platform: 'WHATNOT K',  qty: 58,  sales: 1676.00, afterFees: 1466.36, cogs: null,    shipping: 0.00,   profit: null,    viewers: null },
+  { date: '2026-04-21', platform: 'WHATNOT MC', qty: 63,  sales: 796.00,  afterFees: 653.34,  cogs: null,    shipping: 0.00,   profit: null,    viewers: null },
+];
+
+const fmtMoney = n => n == null ? '—' : '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtMoney0 = n => n == null ? '—' : '$' + Math.round(n).toLocaleString('en-US');
+const fmtNum = n => n == null ? '—' : n.toLocaleString('en-US');
+const fmtPct = n => n == null ? '—' : (n * 100).toFixed(1) + '%';
+
+function weekOf(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const start = new Date('2026-04-06T00:00:00');
+  const diffDays = Math.floor((d - start) / (1000 * 60 * 60 * 24));
+  return Math.floor(diffDays / 7) + 1;
+}
+function weekLabel(w) {
+  const ranges = { 1: 'Week 1 (Apr 6–12)', 2: 'Week 2 (Apr 13–19)', 3: 'Week 3 (Apr 20–26)' };
+  return ranges[w] || `Week ${w}`;
+}
+function platformColor(p) {
+  if (p === 'TIKTOK') return '#ff3b6b';
+  if (p === 'WHATNOT S') return '#ffd43b';
+  if (p === 'WHATNOT WC') return '#b388ff';
+  if (p === 'WHATNOT K') return '#42e2b8';
+  if (p === 'WHATNOT MC') return '#ff9f43';
+  return '#8a99b3';
+}
+function platformTag(p) {
+  const map = { 'TIKTOK': 'tag-tiktok', 'WHATNOT S': 'tag-wn-s', 'WHATNOT WC': 'tag-wn-wc', 'WHATNOT K': 'tag-wn-k', 'WHATNOT MC': 'tag-wn-mc' };
+  return map[p] || '';
+}
+function platformLabel(p) {
+  const map = { 'TIKTOK': 'TikTok', 'WHATNOT S': 'WN · Sneakers', 'WHATNOT WC': 'WN · Womens', 'WHATNOT MC': 'WN · Mens', 'WHATNOT K': 'WN · Kids' };
+  return map[p] || p;
+}
+function platformLabelShort(p) {
+  const map = { 'TIKTOK': 'TikTok', 'WHATNOT S': 'Sneakers', 'WHATNOT WC': 'Womens', 'WHATNOT MC': 'Mens', 'WHATNOT K': 'Kids' };
+  return map[p] || p;
+}
+function isWhatnot(p) { return p && p.startsWith('WHATNOT'); }
+
+rawRows.forEach(r => {
+  r.week = weekOf(r.date);
+  r.margin = (r.profit != null && r.sales) ? r.profit / r.sales : null;
+  r.rpv = (r.viewers && r.afterFees != null) ? r.afterFees / r.viewers : null;
+  r.aov = (r.qty && r.sales) ? r.sales / r.qty : null;
+});
+
+const state = { week: 'all', platform: 'all', sortKey: 'date', sortDir: 'desc' };
+
+function filteredRows() {
+  return rawRows.filter(r => {
+    if (state.week !== 'all' && r.week !== state.week) return false;
+    if (state.platform === 'all') return true;
+    if (state.platform === 'TIKTOK') return r.platform === 'TIKTOK';
+    if (state.platform === 'WHATNOT') return isWhatnot(r.platform);
+    return r.platform === state.platform;
+  });
+}
+
+function buildFilters() {
+  const weekEl = document.getElementById('weekFilter');
+  const weeks = ['all', 1, 2, 3];
+  weekEl.innerHTML = '';
+  weeks.forEach(w => {
+    const pill = document.createElement('div');
+    pill.className = 'pill' + (state.week === w ? ' active' : '');
+    pill.textContent = w === 'all' ? 'All' : `W${w}`;
+    pill.onclick = () => { state.week = w; render(); };
+    weekEl.appendChild(pill);
+  });
+  const pEl = document.getElementById('platformFilter');
+  const plats = ['all', 'TIKTOK', 'WHATNOT', 'WHATNOT S', 'WHATNOT WC', 'WHATNOT MC', 'WHATNOT K'];
+  const pillLabel = { 'all': 'All', 'TIKTOK': 'TikTok', 'WHATNOT': 'Whatnot (all)', 'WHATNOT S': 'Sneakers', 'WHATNOT WC': 'Womens', 'WHATNOT MC': 'Mens', 'WHATNOT K': 'Kids' };
+  pEl.innerHTML = '';
+  plats.forEach(p => {
+    const pill = document.createElement('div');
+    pill.className = 'pill' + (state.platform === p ? ' active' : '');
+    pill.textContent = pillLabel[p] || p;
+    pill.onclick = () => { state.platform = p; render(); };
+    pEl.appendChild(pill);
+  });
+}
+
+function renderKPIs() {
+  const rows = filteredRows();
+  const totalSales = rows.reduce((s, r) => s + (r.sales || 0), 0);
+  const totalAfterFees = rows.reduce((s, r) => s + (r.afterFees || 0), 0);
+  const totalProfit = rows.filter(r => r.profit != null).reduce((s, r) => s + r.profit, 0);
+  const totalUnits = rows.reduce((s, r) => s + (r.qty || 0), 0);
+  const totalViewers = rows.reduce((s, r) => s + (r.viewers || 0), 0);
+  const totalShows = rows.length;
+  const profitableShows = rows.filter(r => r.profit != null);
+  const avgMargin = profitableShows.length ? profitableShows.reduce((s, r) => s + r.margin, 0) / profitableShows.length : null;
+  const kpis = [
+    { label: 'Total Sales',       value: fmtMoney0(totalSales),                sub: `${totalShows} shows` },
+    { label: 'After Fees',        value: fmtMoney0(totalAfterFees),            sub: `fees ${fmtPct((totalSales - totalAfterFees) / totalSales)}` },
+    { label: 'Profit (to date)',  value: fmtMoney0(totalProfit),               sub: `${profitableShows.length} complete shows` },
+    { label: 'Units Sold',        value: fmtNum(totalUnits),                   sub: `${totalShows ? (totalUnits / totalShows).toFixed(0) : 0} avg/show` },
+    { label: 'Avg Profit Margin', value: avgMargin != null ? fmtPct(avgMargin) : '—', sub: 'across complete shows' },
+    { label: 'Total Viewers',     value: fmtNum(totalViewers),                 sub: `${totalShows ? Math.round(totalViewers / totalShows).toLocaleString() : 0} avg/show` },
+  ];
+  document.getElementById('kpiGrid').innerHTML = kpis.map(k => `
+    <div class="kpi"><div class="label">${k.label}</div><div class="value">${k.value}</div><div class="delta">${k.sub}</div></div>`).join('');
+}
+
+function renderInsights() {
+  const rows = filteredRows();
+  if (rows.length === 0) { document.getElementById('insights').innerHTML = ''; return; }
+  const complete = rows.filter(r => r.profit != null);
+  const bestProfit = complete.slice().sort((a, b) => b.profit - a.profit)[0];
+  const withRpv = rows.filter(r => r.rpv != null);
+  const bestRpv = withRpv.slice().sort((a, b) => b.rpv - a.rpv)[0];
+  const tik = rows.filter(r => r.platform === 'TIKTOK');
+  const wn = rows.filter(r => isWhatnot(r.platform));
+  const tikSales = tik.reduce((s, r) => s + (r.sales || 0), 0);
+  const wnSales = wn.reduce((s, r) => s + (r.sales || 0), 0);
+  const tikViewers = tik.reduce((s, r) => s + (r.viewers || 0), 0);
+  const wnViewers = wn.reduce((s, r) => s + (r.viewers || 0), 0);
+  const tikRpv = tikViewers ? (tik.reduce((s, r) => s + (r.afterFees || 0), 0) / tikViewers) : null;
+  const wnRpv = wnViewers ? (wn.reduce((s, r) => s + (r.afterFees || 0), 0) / wnViewers) : null;
+  const insights = [];
+  if (bestProfit) insights.push({ hdr: 'Top Profit Show', body: `<b>${platformLabel(bestProfit.platform)}</b> on <b>${bestProfit.date}</b> — <b>${fmtMoney(bestProfit.profit)}</b> profit (${fmtPct(bestProfit.margin)} margin) on ${bestProfit.qty} units.` });
+  if (bestRpv) insights.push({ hdr: 'Best $/Viewer', body: `<b>${platformLabel(bestRpv.platform)}</b> on <b>${bestRpv.date}</b> — <b>${fmtMoney(bestRpv.rpv)}</b> per viewer (${fmtNum(bestRpv.viewers)} viewers, ${fmtMoney0(bestRpv.afterFees)} after fees).` });
+  if (tikRpv != null && wnRpv != null) {
+    const ratio = (wnRpv / tikRpv).toFixed(1);
+    insights.push({ hdr: 'Platform Intensity', body: `Whatnot earns <b>${ratio}×</b> more per viewer than TikTok (<b>${fmtMoney(wnRpv)}</b> vs <b>${fmtMoney(tikRpv)}</b>). TikTok wins on reach, Whatnot on conversion.` });
+  } else {
+    insights.push({ hdr: 'Platform Split', body: `TikTok: ${fmtMoney0(tikSales)} sales / ${fmtNum(tikViewers)} viewers. Whatnot: ${fmtMoney0(wnSales)} sales / ${fmtNum(wnViewers)} viewers.` });
+  }
+  document.getElementById('insights').innerHTML = insights.map(i => `<div class="insight"><div class="hdr">${i.hdr}</div><div class="body">${i.body}</div></div>`).join('');
+}
+
+let charts = {};
+function destroyCharts() { Object.values(charts).forEach(c => { try { c.destroy(); } catch(e){} }); charts = {}; }
+const gridColor = 'rgba(138, 153, 179, 0.12)';
+const tickColor = '#8a99b3';
+Chart.defaults.color = tickColor;
+Chart.defaults.font.family = '-apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif';
+Chart.defaults.font.size = 11;
+
+function renderCharts() {
+  destroyCharts();
+  const rows = filteredRows();
+  const byDate = {};
+  rows.forEach(r => {
+    if (!byDate[r.date]) byDate[r.date] = { tiktok: 0, whatnot: 0, profit: 0 };
+    if (r.platform === 'TIKTOK') byDate[r.date].tiktok += r.sales || 0;
+    else byDate[r.date].whatnot += r.sales || 0;
+    if (r.profit != null) byDate[r.date].profit += r.profit;
+  });
+  const dates = Object.keys(byDate).sort();
+  const labels = dates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+  charts.daily = new Chart(document.getElementById('dailySalesChart'), {
+    type: 'bar',
+    data: { labels, datasets: [
+      { type: 'bar', label: 'TikTok Sales', data: dates.map(d => byDate[d].tiktok), backgroundColor: 'rgba(255,59,107,0.75)', borderRadius: 4, stack: 'sales' },
+      { type: 'bar', label: 'Whatnot Sales', data: dates.map(d => byDate[d].whatnot), backgroundColor: 'rgba(255,212,59,0.8)', borderRadius: 4, stack: 'sales' },
+      { type: 'line', label: 'Profit', data: dates.map(d => byDate[d].profit || null), borderColor: '#5ad1ff', backgroundColor: '#5ad1ff', tension: 0.3, pointRadius: 3, yAxisID: 'y', spanGaps: true },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+      scales: { x: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor } }, y: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor, callback: v => '$' + (v/1000).toFixed(0) + 'k' } } },
+    },
+  });
+
+  const viewerByDate = {};
+  rows.forEach(r => {
+    if (r.viewers == null) return;
+    if (!viewerByDate[r.date]) viewerByDate[r.date] = { tiktok: 0, whatnot: 0 };
+    if (r.platform === 'TIKTOK') viewerByDate[r.date].tiktok += r.viewers;
+    else viewerByDate[r.date].whatnot += r.viewers;
+  });
+  const vDates = Object.keys(viewerByDate).sort();
+  const vLabels = vDates.map(d => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+  charts.viewers = new Chart(document.getElementById('viewersChart'), {
+    type: 'line',
+    data: { labels: vLabels, datasets: [
+      { label: 'TikTok', data: vDates.map(d => viewerByDate[d].tiktok || null), borderColor: '#ff3b6b', backgroundColor: 'rgba(255,59,107,0.15)', tension: 0.3, fill: true, pointRadius: 3, spanGaps: true },
+      { label: 'Whatnot', data: vDates.map(d => viewerByDate[d].whatnot || null), borderColor: '#ffd43b', backgroundColor: 'rgba(255,212,59,0.18)', tension: 0.3, fill: true, pointRadius: 3, spanGaps: true },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+      scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor } }, y: { grid: { color: gridColor }, ticks: { color: tickColor, callback: v => v.toLocaleString() } } },
+    },
+  });
+
+  const platformSales = {};
+  rows.forEach(r => { platformSales[r.platform] = (platformSales[r.platform] || 0) + (r.sales || 0); });
+  const pLabels = Object.keys(platformSales);
+  charts.donut = new Chart(document.getElementById('salesDonutChart'), {
+    type: 'doughnut',
+    data: { labels: pLabels.map(platformLabel), datasets: [{ data: pLabels.map(p => platformSales[p]), backgroundColor: pLabels.map(platformColor), borderColor: '#131a26', borderWidth: 2 }] },
+    options: { responsive: true, maintainAspectRatio: false, cutout: '62%',
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10 } },
+      tooltip: { callbacks: { label: ctx => `${ctx.label}: ${fmtMoney0(ctx.raw)}` } } },
+    },
+  });
+
+  const marginByPlatform = {};
+  rows.filter(r => r.profit != null && r.sales).forEach(r => {
+    if (!marginByPlatform[r.platform]) marginByPlatform[r.platform] = { profit: 0, sales: 0 };
+    marginByPlatform[r.platform].profit += r.profit;
+    marginByPlatform[r.platform].sales += r.sales;
+  });
+  const mLabels = Object.keys(marginByPlatform);
+  charts.margin = new Chart(document.getElementById('marginChart'), {
+    type: 'bar',
+    data: { labels: mLabels.map(platformLabelShort), datasets: [{ label: 'Margin', data: mLabels.map(p => (marginByPlatform[p].profit / marginByPlatform[p].sales) * 100), backgroundColor: mLabels.map(platformColor), borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => ctx.parsed.y.toFixed(1) + '%' } } },
+      scales: { x: { grid: { display: false }, ticks: { color: tickColor } }, y: { grid: { color: gridColor }, ticks: { color: tickColor, callback: v => v + '%' } } },
+    },
+  });
+
+  const rpvByPlatform = {};
+  rows.filter(r => r.viewers && r.afterFees != null).forEach(r => {
+    if (!rpvByPlatform[r.platform]) rpvByPlatform[r.platform] = { rev: 0, viewers: 0 };
+    rpvByPlatform[r.platform].rev += r.afterFees;
+    rpvByPlatform[r.platform].viewers += r.viewers;
+  });
+  const rLabels = Object.keys(rpvByPlatform);
+  charts.rpv = new Chart(document.getElementById('rpvChart'), {
+    type: 'bar',
+    data: { labels: rLabels.map(platformLabelShort), datasets: [{ label: '$ / Viewer', data: rLabels.map(p => rpvByPlatform[p].rev / rpvByPlatform[p].viewers), backgroundColor: rLabels.map(platformColor), borderRadius: 6 }] },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + ctx.parsed.y.toFixed(2) + ' / viewer' } } },
+      scales: { x: { grid: { display: false }, ticks: { color: tickColor } }, y: { grid: { color: gridColor }, ticks: { color: tickColor, callback: v => '$' + v.toFixed(2) } } },
+    },
+  });
+
+  const byWeek = {};
+  rows.forEach(r => {
+    if (!byWeek[r.week]) byWeek[r.week] = { sales: 0, profit: 0, units: 0, viewers: 0, shows: 0 };
+    byWeek[r.week].sales += r.sales || 0;
+    byWeek[r.week].profit += r.profit || 0;
+    byWeek[r.week].units += r.qty || 0;
+    byWeek[r.week].viewers += r.viewers || 0;
+    byWeek[r.week].shows += 1;
+  });
+  const weeks = Object.keys(byWeek).map(Number).sort();
+  charts.weekly = new Chart(document.getElementById('weeklyChart'), {
+    type: 'bar',
+    data: { labels: weeks.map(weekLabel), datasets: [
+      { type: 'bar', label: 'Sales', data: weeks.map(w => byWeek[w].sales), backgroundColor: 'rgba(90,209,255,0.7)', borderRadius: 6, yAxisID: 'y' },
+      { type: 'bar', label: 'Profit (complete shows)', data: weeks.map(w => byWeek[w].profit), backgroundColor: 'rgba(66,226,184,0.8)', borderRadius: 6, yAxisID: 'y' },
+      { type: 'line', label: 'Units', data: weeks.map(w => byWeek[w].units), borderColor: '#ffd43b', backgroundColor: '#ffd43b', tension: 0.3, pointRadius: 4, yAxisID: 'y1' },
+    ]},
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } },
+      scales: { x: { grid: { display: false }, ticks: { color: tickColor } },
+        y: { grid: { color: gridColor }, ticks: { color: tickColor, callback: v => '$' + (v/1000).toFixed(0) + 'k' }, position: 'left' },
+        y1: { grid: { display: false }, ticks: { color: tickColor }, position: 'right' } },
+    },
+  });
+
+  const aovByPlatform = {};
+  rows.forEach(r => {
+    if (!aovByPlatform[r.platform]) aovByPlatform[r.platform] = { sales: 0, qty: 0 };
+    aovByPlatform[r.platform].sales += r.sales || 0;
+    aovByPlatform[r.platform].qty += r.qty || 0;
+  });
+  const aLabels = Object.keys(aovByPlatform);
+  charts.aov = new Chart(document.getElementById('aovChart'), {
+    type: 'bar',
+    data: { labels: aLabels.map(platformLabelShort), datasets: [{ label: 'Avg Order Value', data: aLabels.map(p => aovByPlatform[p].qty ? aovByPlatform[p].sales / aovByPlatform[p].qty : 0), backgroundColor: aLabels.map(platformColor), borderRadius: 6 }] },
+    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: ctx => '$' + ctx.parsed.x.toFixed(2) + ' avg ticket' } } },
+      scales: { x: { grid: { color: gridColor }, ticks: { color: tickColor, callback: v => '$' + v.toFixed(0) } }, y: { grid: { display: false }, ticks: { color: tickColor } } },
+    },
+  });
+}
+
+function renderTable() {
+  const rows = filteredRows().slice();
+  const { sortKey, sortDir } = state;
+  rows.sort((a, b) => {
+    let va = a[sortKey], vb = b[sortKey];
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'string') return sortDir === 'asc' ? va.localeCompare(vb) : vb.localeCompare(va);
+    return sortDir === 'asc' ? va - vb : vb - va;
+  });
+  const tbody = document.querySelector('#showTable tbody');
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td>${new Date(r.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</td>
+      <td><span class="platform-tag ${platformTag(r.platform)}">${platformLabel(r.platform)}</span></td>
+      <td>${fmtNum(r.qty)}</td>
+      <td>${fmtMoney(r.sales)}</td>
+      <td>${fmtMoney(r.afterFees)}</td>
+      <td>${fmtMoney(r.cogs)}</td>
+      <td>${fmtMoney(r.shipping)}</td>
+      <td class="${r.profit != null && r.profit >= 500 ? 'good' : ''}">${fmtMoney(r.profit)}</td>
+      <td>${fmtPct(r.margin)}</td>
+      <td>${fmtNum(r.viewers)}</td>
+      <td>${r.rpv != null ? '$' + r.rpv.toFixed(2) : '—'}</td>
+      <td>${r.aov != null ? '$' + r.aov.toFixed(2) : '—'}</td>
+    </tr>`).join('');
+  document.querySelectorAll('#showTable th').forEach(th => {
+    th.onclick = () => {
+      const key = th.dataset.key;
+      if (state.sortKey === key) state.sortDir = state.sortDir === 'asc' ? 'desc' : 'asc';
+      else { state.sortKey = key; state.sortDir = key === 'date' ? 'desc' : 'desc'; }
+      renderTable();
+    };
+  });
+}
+
+function renderDateRange() {
+  const rows = filteredRows();
+  if (rows.length === 0) { document.getElementById('dateRange').textContent = 'No shows match the current filters.'; return; }
+  const dates = rows.map(r => r.date).sort();
+  const first = new Date(dates[0] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const last = new Date(dates[dates.length - 1] + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  document.getElementById('dateRange').innerHTML = `<b>${rows.length}</b> shows from <b>${first}</b> to <b>${last}</b> · TikTok &amp; Whatnot combined`;
+}
+
+function render() { buildFilters(); renderDateRange(); renderKPIs(); renderInsights(); renderCharts(); renderTable(); }
+render();
+</script>
+</body>
+</html>
